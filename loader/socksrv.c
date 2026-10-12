@@ -89,7 +89,7 @@ static int safe_elf(const uint8_t* b,size_t n){
  return 0;
 }
 // (AI-assisted) Relay commands to a resident authenticated localhost worker.
-static int input_connect(void){int s=socket(AF_INET,SOCK_STREAM,0);if(s<0)return -1;struct sockaddr_in a={0};a.sin_len=sizeof(a);a.sin_family=AF_INET;a.sin_port=htons(1343);a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);if(connect(s,(void*)&a,sizeof(a))){close(s);return -1;}return s;}
+static int input_connect(void){int s=socket(AF_INET,SOCK_STREAM,0);if(s<0)return -1;struct sockaddr_in a={0};a.sin_len=sizeof(a);a.sin_family=AF_INET;a.sin_port=htons(1344);a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);if(connect(s,(void*)&a,sizeof(a))){close(s);return -1;}return s;}
 static int write_all(int fd,const void* data,size_t n){const char* p=data;while(n){ssize_t got=write(fd,p,n);if(got<=0)return -1;p+=got;n-=got;}return 0;}
 static void input_relay(int fd,const char* header,uint32_t size){
  unsigned char body[524];if(exact(fd,body,size))return;
@@ -106,8 +106,8 @@ static void on_connection(int fd,int remote){
  struct timeval timeout={5,0};setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
  setsockopt(fd,SOL_SOCKET,SO_NOSIGPIPE,&(int){1},sizeof(int));
  char header[80];if(exact(fd,header,sizeof(header)))return;
- unsigned diff=0;for(int i=0;i<64;i++)diff|=(unsigned char)header[8+i]^(unsigned char)BRIDGE_KEY[i];
- if(memcmp(header,"PS5DEV1\0",8)||diff){event("Rejected authentication");return;}
+ unsigned diff=0; // LAN mode: no pairing key required.
+ if(memcmp(header,"PS5DEV1\0",8)||diff){event("Rejected protocol header");return;}
  if(remote)last_host=time(NULL);
  uint32_t op,size;memcpy(&op,header+72,4);memcpy(&size,header+76,4);
  if(op==20&&size==1044){char* args[]={"managed-app.elf",NULL};elfldr_spawn(fd,args,apps_elf,apps_elf_size);return;}
@@ -116,7 +116,7 @@ static void on_connection(int fd,int remote){
  if(op==16&&size==0){char* args[]={"photo-list.elf",NULL};elfldr_spawn(fd,args,photo_list_elf,photo_list_elf_size);return;}
  if(op==17&&size==776){char* args[]={"photo-read.elf",NULL};elfldr_spawn(fd,args,photo_read_elf,photo_read_elf_size);return;}
  if(op==10&&size>=28&&size<=524){pid_t child=fork();if(child==0){input_relay(fd,header,size);close(fd);_exit(0);}if(child<0)event("Input relay fork failed");return;}
- if(op==1&&size==0){char ip[INET_ADDRSTRLEN],reply[256];local_address(ip,sizeof(ip));int n=snprintf(reply,sizeof(reply),"DEVBRIDGE/1 READY version=0.2.0 port=1337 ip=%s host=%s age=%lld firmware=%08x\n",ip,last_host&&time(NULL)-last_host<15?"connected":"idle",last_host?(long long)(time(NULL)-last_host):-1LL,(unsigned)kernel_get_fw_version());write(fd,reply,n);return;}
+ if(op==1&&size==0){char ip[INET_ADDRSTRLEN],reply[256];local_address(ip,sizeof(ip));int n=snprintf(reply,sizeof(reply),"DEVBRIDGE/1 READY version=0.2.1 mode=LAN port=1337 ip=%s host=%s age=%lld firmware=%08x\n",ip,last_host&&time(NULL)-last_host<15?"connected":"idle",last_host?(long long)(time(NULL)-last_host):-1LL,(unsigned)kernel_get_fw_version());write(fd,reply,n);return;}
  if(op==3&&size==0){FILE* f=fopen("/data/ps5-devbridge/events.log","r");if(f){fseek(f,0,SEEK_END);long n=ftell(f);fseek(f,n>16384?n-16384:0,SEEK_SET);char line[512];while(fgets(line,sizeof(line),f))write(fd,line,strlen(line));fclose(f);}return;}
  if(op==5&&size==0){FILE* f=fopen("/data/ps5-devbridge/browser-request.txt","r");if(f){char url[2048]={0};if(fgets(url,sizeof(url),f))write(fd,url,strlen(url));fclose(f);remove("/data/ps5-devbridge/browser-request.txt");}return;}
  if((op==4||op==9)&&size>0&&size<2048){char url[2048]={0};if(exact(fd,url,size))return;if(strncmp(url,"https://",8)&&strncmp(url,"http://",7))return;if(strpbrk(url,"\r\n"))return;
@@ -179,7 +179,8 @@ serve_elfldr(uint16_t port) {
       break;
     }
 
-    if(cliaddr.sin_addr.s_addr != inet_addr(BRIDGE_PEER) && cliaddr.sin_addr.s_addr != htonl(INADDR_LOOPBACK)){close(connfd);event("Rejected peer address");continue;}
+    uint32_t peer=ntohl(cliaddr.sin_addr.s_addr);
+    if(!((peer>>24)==127||(peer>>24)==10||(peer>>20)==0xac1||(peer>>16)==0xc0a8)){close(connfd);event("Rejected peer address");continue;}
     on_connection(connfd,cliaddr.sin_addr.s_addr!=htonl(INADDR_LOOPBACK));
     close(connfd);
   }
@@ -259,8 +260,8 @@ int main() {
   signal(SIGCHLD, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
 
-  event("PS5 DevBridge v0.2.0 started on port 1337 (AI-assisted)");
-  notify_address("Welcome to PS5 DevBridge v0.2.0 (AI-assisted)\nPayload ready - IP / port:", port);
+  event("PS5 DevBridge v0.2.1 started on port 1337 (AI-assisted)");
+  notify_address("Welcome to PS5 DevBridge v0.2.1 (AI-assisted)\nPayload ready - IP / port:", port);
   while(1) {
     serve_elfldr(port);
     sleep(3);

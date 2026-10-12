@@ -15,7 +15,22 @@ struct Param{uint32_t size;int user;uint32_t options;uint64_t crash;uint32_t fla
 static bool title(const char* t){if(strlen(t)!=9||!strncmp(t,"NPXS",4))return false;for(int i=0;i<9;i++)if(i<4?(t[i]<'A'||t[i]>'Z'):(t[i]<'0'||t[i]>'9'))return false;return true;}
 static bool metadata(const std::string& path,const char* id){struct stat st{};if(lstat(path.c_str(),&st)||!S_ISDIR(st.st_mode))return false;FILE* f=fopen((path+"/sce_sys/param.json").c_str(),"r");if(!f)return false;char b[8192]{};fread(b,1,sizeof(b)-1,f);fclose(f);char* at=strstr(b,"\"titleId\"");if(!at)return false;at=strchr(at,':');if(!at)return false;at=strchr(at,'"');return at&&!strncmp(at+1,id,9)&&at[10]=='"';}
 static bool root_path(const char* p,const char* id){char want[1024];snprintf(want,sizeof(want),"/data/homebrew/%s",id);if(!strcmp(p,want))return true;for(int i=0;i<8;i++){snprintf(want,sizeof(want),"/mnt/usb%d/homebrew/%s",i,id);if(!strcmp(p,want))return true;}return false;}
-int main(){setvbuf(stdout,nullptr,_IONBF,0);Request q{};size_t n=0;while(n<sizeof(q)){auto got=read(0,(char*)&q+n,sizeof(q)-n);if(got<=0)return 1;n+=got;}if(!memchr(q.title,0,16)||!memchr(q.path,0,1024)||q.action>8)return 1;
+// (AI-assisted) Close a verified native app ID, never an arbitrary process/PID.
+static int close_native(const char* requested,bool current){
+ void* lib=dlopen("libSceSystemService.sprx",RTLD_LAZY);
+ auto find=lib?(int(*)(const char*))dlsym(lib,"sceLncUtilGetAppId"):nullptr;
+ auto big=lib?(int(*)())dlsym(lib,"sceLncUtilGetAppIdOfRunningBigApp"):nullptr;
+ auto gettitle=lib?(int(*)(int,char*))dlsym(lib,"sceLncUtilGetAppTitleId"):nullptr;
+ auto close=lib?(int(*)(unsigned))dlsym(lib,"sceLncUtilKillApp"):nullptr;
+ if(!find||!big||!gettitle||!close)return 1;
+ if(!current&&!title(requested))return 1;
+ int id=current?big():find(requested);char actual[256]{};
+ if(id<=0){puts("APP CLOSE running=0");return 0;}
+ if(gettitle(id,actual)||!title(actual)||(!current&&strcmp(actual,requested))){puts("APP CLOSE refused: unverified or system title");return 1;}
+ int rc=close((unsigned)id);printf("APP CLOSE title=%s id=%d result=%08x\n",actual,id,rc);return rc?1:0;
+}
+int main(){setvbuf(stdout,nullptr,_IONBF,0);Request q{};size_t n=0;while(n<sizeof(q)){auto got=read(0,(char*)&q+n,sizeof(q)-n);if(got<=0)return 1;n+=got;}if(!memchr(q.title,0,16)||!memchr(q.path,0,1024)||q.action>10)return 1;
+ if(q.action==9||q.action==10)return close_native(q.title,q.action==10);
  mkdir("/data/ps5-devbridge",0755);mkdir("/data/ps5-devbridge/managed",0755);
  if(!q.action){DIR* d=opendir("/data/ps5-devbridge/managed");if(d){while(auto* e=readdir(d)){if(!title(e->d_name))continue;FILE* f=fopen((std::string("/data/ps5-devbridge/managed/")+e->d_name).c_str(),"r");char path[1024]{};if(f){fgets(path,sizeof(path),f);fclose(f);printf("APP %s path=%s\n",e->d_name,path);}}closedir(d);}return 0;}
  if(!title(q.title))return 1;std::string marker=std::string("/data/ps5-devbridge/managed/")+q.title;char path[1024]{};

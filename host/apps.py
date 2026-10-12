@@ -3,9 +3,9 @@ import argparse,struct,re,json,urllib.request
 from pathlib import Path
 from files import upload
 from bridge import request
-ACTIONS={'list':0,'register':1,'start':2,'close':3,'update':4,'remove':5,'state':6,'stage':7,'mkdir':8}
+ACTIONS={'list':0,'register':1,'start':2,'close':3,'update':4,'remove':5,'state':6,'stage':7,'mkdir':8,'close-any':9,'close-current':10}
 def command(action,title='',path=''):
- if action!='list' and (not re.fullmatch(r'[A-Z]{4}[0-9]{5}',title) or title.startswith('NPXS')):raise ValueError('Expected homebrew title ID')
+ if action not in ['list','close-current'] and (not re.fullmatch(r'[A-Z]{4}[0-9]{5}',title) or title.startswith('NPXS')):raise ValueError('Expected homebrew title ID')
  if len(path.encode())>1023:raise ValueError('Path too long')
  out=request(20,struct.pack('<I16s1024s',ACTIONS[action],title.encode(),path.encode()),timeout=45)
  if not out:raise RuntimeError('Managed-app command refused or failed; check registered path/title')

@@ -1,11 +1,11 @@
-# PS5 DevBridge v0.2.0
+# PS5 DevBridge v0.2.1 (AI-assisted)
 
 A background PS5 homebrew development payload on TCP **1337**, plus an optional live-log TV console. The payload stays available when the app is closed.
 
 ## What the payload can do
 
 - Welcome notification: version, firmware, IP and port.
-- Authenticated PC activity tracking; the TV app shows AI / HOST connected or idle.
+- LAN PC activity tracking; the TV app shows AI / HOST connected or idle.
 - Automated controller/screenshot tests, with optional region-based screenshot baselines.
 - Own-app crash reporter: fault address, instruction/stack registers and best-effort address stack traces.
 - Managed native homebrew: register, list, state, start, close, staged folder install/update and remove.
@@ -19,8 +19,8 @@ A background PS5 homebrew development payload on TCP **1337**, plus an optional 
 | --- | --- |
 | Background service | Dedicated TCP 1337 service that stays running without the TV app |
 | Startup information | Welcome notification, payload version, firmware, local IP and port |
-| Pairing | Authentication key and configured-PC/localhost access checks |
-| Connection status | Recent authenticated host activity; optional heartbeat and TV indicator |
+| Local access | No pairing/key; private IPv4 LAN and localhost connections only |
+| Connection status | Recent host activity; optional heartbeat and TV indicator |
 | ELF execution | Upload SDK payload ELFs and receive their stdout/result output |
 | Logs | Read daemon events and append test output; live polling on the TV console |
 | Controller commands | D-pad, face buttons, Create, Options, shoulder buttons, stick clicks, touchpad, analog sticks and triggers |
@@ -32,7 +32,7 @@ A background PS5 homebrew development payload on TCP **1337**, plus an optional 
 | PKG installation | Start installation of a local PKG, then query progress, state and errors by content ID |
 | PKG uninstall | Uninstall an explicitly named non-system title through the native service |
 | Homebrew registry | Register and list your own native homebrew folders and inspect running state |
-| App lifecycle | Start or close an explicitly registered homebrew title |
+| App lifecycle | Start a registered title; close a named non-system native app or the current app without registration |
 | Native folder install/update | Verify staged files, replace the folder, retain a backup, register/mount through ShadowMountPlus |
 | Managed removal | Unregister a homebrew title and retain its files in a timestamped trash folder |
 | Own-app crash reports | Opt-in signal, fault address, instruction/stack registers and best-effort stack return addresses |
@@ -42,17 +42,17 @@ A background PS5 homebrew development payload on TCP **1337**, plus an optional 
 
 Some functions use small helper processes embedded in the payload. Controller commands use a resident worker; the PC does not need to recompile or upload a helper ELF for each input. Crash reporting must be integrated into your own app. Hardware-tested and pending functions are listed below.
 
-## Start and pairing
+## Start and configure the PS5 address
 
 Load `dist/devbridge-loader.elf` with your payload manager once after each reboot/jailbreak. The daemon uses port 1337; port 9021 is only used for initial loading and the optional app bootstrap.
 
 ```text
-python host/configure.py --host YOUR_PS5_IP --peer YOUR_PC_IP
+python host/configure.py --host YOUR_PS5_IP
 python host/bridge.py status
 python host/session.py
 ```
 
-`local-config.json`, `loader/bridge_config.h` and `app/src/local_config.hpp` contain private pairing data. Do not publish them or your paired binary as a generic release. Generate your own pairing and rebuild. Connections are limited to the configured PC and localhost. Activity tracking confirms authenticated host traffic, not whether the operator is ChatGPT or a human.
+`local-config.json` stores only the PS5 IP and port. There is no pairing key. The payload accepts localhost and private IPv4 addresses in 10/8, 172.16/12 and 192.168/16. Any device on that LAN can issue commands: use a trusted development network and do not forward port 1337 to the internet. Activity tracking indicates PC traffic, not whether the operator is ChatGPT or a human.
 
 ## Build
 
@@ -60,14 +60,9 @@ Set `PS5_PAYLOAD_SDK` to your SDK directory, then run `bash build.sh` for the pa
 
 ## Public release app
 
-`dist/PS5-DevBridge-v0.2.0-release-app.zip` is the redistributable native app. It contains neither this developer's pairing key nor a personally paired payload. It reads its key and payload from the local PS5 data folder.
+`dist/PS5-DevBridge-v0.2.1-release-app.zip` is the public native app with the generic, key-free payload included. It needs no pairing file. Install/mount the PPSA99337 folder; Square sends its embedded payload to your existing localhost ELF loader on port 9021.
 
-1. Generate your own pairing configuration and build your payload.
-2. Load that payload once with your payload manager.
-3. Run `python host/prepare_release_app.py` from the paired PC. This transfers the private key and your built payload to `/data/ps5-devbridge/` without printing the key.
-4. Install/mount the release app's `PPSA99337` folder. Square starts the local payload through your existing localhost loader on port 9021.
-
-Build the public app with `bash build-release-app.sh`. The private `--with-app` build remains useful for personal development; it embeds pairing data and must not be published as a generic binary.
+Build it with `bash build-release-app.sh`. The ELF and app can now be distributed without embedding personal pairing credentials.
 
 ## Create your own project
 
@@ -95,14 +90,18 @@ python host/apps.py register PPSA99339 /mnt/usb0/homebrew/PPSA99339
 python host/apps.py list
 python host/apps.py start PPSA99339
 python host/apps.py close PPSA99339
+python host/apps.py close-any FAKE00666
+python host/apps.py close-current
 python host/apps.py install-folder PPSA99339 templates/simple-calc/dist/PPSA99339
 python host/apps.py remove PPSA99339
 python host/crashes.py /data/ps5-devbridge/crashes/PPSA99339.txt calc-crash.txt
 ```
 
+`close-any TITLE_ID` and `close-current` do not need a registry entry. They resolve the native app ID and verify its title before closing. System titles and arbitrary process IDs are excluded. Closing a Store can pause its downloads; use this deliberately during your development workflow.
+
 Folder installation uses the ShadowMountPlus API on port 10101 to register/mount. The parent homebrew directory must already exist. Update refuses a running app, uploads into a sibling staging folder, verifies every file and promotes the folder while keeping the original backup. Managed removal unregisters the title and retains its folder as a timestamped trash directory. It does not silently recursively delete saves or other app data.
 
-Controller commands use a resident authenticated localhost worker on port 1343. The host sends only small command frames. Virtual devices are scoped to each bounded sequence and physical-controller ownership is restored afterward. Commands allow up to 32 steps, 3 seconds per hold/pause and 15 seconds total. This controller implementation is firmware-5.10-specific. PS-button injection is not implemented. `bridge.py stop` requests input cancellation.
+Controller commands use a resident localhost worker on port 1344. The host sends only small command frames. Virtual devices are scoped to each bounded sequence and physical-controller ownership is restored afterward. Commands allow up to 32 steps, 3 seconds per hold/pause and 15 seconds total. This controller implementation is firmware-5.10-specific. PS-button injection is not implemented. `bridge.py stop` requests input cancellation.
 
 Screenshots use held Create, then wait for and retrieve a new PNG below `/user/av_contents/photo/`. An older screenshot is never substituted. Capture restrictions can prevent screenshots. UI tests without a baseline save evidence for review; they do not invent a visual pass.
 
@@ -123,7 +122,7 @@ Use a coding-agent environment with local file, shell and image-viewing tools, s
 ### Connection setup
 
 1. Load the DevBridge ELF after jailbreak, or press Square in the optional app while your localhost loader is running on port 9021.
-2. Generate pairing locally with `python host/configure.py --host YOUR_PS5_IP --peer YOUR_PC_IP`, then rebuild the payload/app. Keep the pairing files private.
+2. Set your PS5 address with `python host/configure.py --host YOUR_PS5_IP`. No pairing or device-specific rebuild is needed.
 3. Check `python host/bridge.py status` from your PC.
 4. Keep `python host/session.py` running in a separate terminal if you want the TV to show an active host session. Activity expires after 15 seconds.
 
@@ -132,9 +131,9 @@ Use a coding-agent environment with local file, shell and image-viewing tools, s
 ```text
 (AI-assisted) Help me build and test my own PS5 homebrew using the PS5-DevBridge project in this workspace.
 
-Read README.md and the host scripts before connecting. Use the local pairing configuration without printing the key. Start by checking host/bridge.py status. Work only on my explicitly named homebrew project.
+Read README.md and the host scripts before connecting. Use the local PS5 address configuration. Start by checking host/bridge.py status. Work only on my explicitly named homebrew project.
 
-Use templates/simple-calc as a working native UI starter based on blackbearreloaded/ps5-homebrew-ui. Give the app its own valid title/content ID, retain upstream licenses, and use the SDK build scripts. Do not copy generated dependencies, pairing keys or private console data into release source archives.
+Use templates/simple-calc as a working native UI starter based on blackbearreloaded/ps5-homebrew-ui. Give the app its own valid title/content ID, retain upstream licenses, and use the SDK build scripts. Do not copy generated dependencies, private console data into release source archives.
 
 Build the app, install its folder through host/apps.py, then launch it. Close only that registered app before an update. Use host/controller.py for bounded inputs, host/screenshot.py for fresh screenshots and host/bridge.py logs for output. Inspect actual screenshots, fix layout problems and rebuild until the requested UI works. A process ID or successful upload is not visual proof.
 
@@ -145,11 +144,11 @@ Do not modify unrelated apps, system software or kernel behavior. Do not claim a
 
 ## Protocol
 
-80-byte little-endian header: magic `PS5DEV1` with terminating NUL, 64-byte pairing key, operation u32, body size u32. Operations: 1 status; 2 ELF; 3 logs; 4/9 browser; 5 legacy browser queue; 7 append log; 8 cancel input; 10 controller; 11 file read; 12 staged file write; 13 commit; 14 PKG install; 15 uninstall; 16 photo inventory; 17 PNG read; 19 package status; 20 managed apps.
+80-byte little-endian header: magic `PS5DEV1` with terminating NUL, 64 reserved bytes (zero-filled; legacy key slot), operation u32, body size u32. Operations: 1 status; 2 ELF; 3 logs; 4/9 browser; 5 legacy browser queue; 7 append log; 8 cancel input; 10 controller; 11 file read; 12 staged file write; 13 commit; 14 PKG install; 15 uninstall; 16 photo inventory; 17 PNG read; 19 package status; 20 managed apps.
 
-Pairing uses private-LAN TCP, not TLS. This is a development bridge, not a remote command shell. Uploaded ELFs are size/layout checked. Helper outputs must be checked independently of spawn results.
+The local service uses plain TCP without authentication or TLS. This is a development bridge, not a remote command shell. Uploaded ELFs are size/layout checked. Helper outputs must be checked independently of spawn results.
 
-## Verified in v0.2.0
+## Verified in v0.2.1
 
 Payload and native app build successfully. On the 5.10 console: managed register/list/state, close/update/start, live-log UI screenshot, file transfer, crash fault/register/stack report and a real header-baseline UI check passed. The calculator starter builds successfully. Managed removal and the app button's offline bootstrap still need a dedicated live check.
 

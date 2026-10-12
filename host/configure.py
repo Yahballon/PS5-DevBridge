@@ -1,14 +1,9 @@
-"""(AI-assisted) Generate private build pairing inputs; never publish local-config.json."""
-import argparse,json,secrets,ipaddress
+"""(AI-assisted) Configure the PS5 address; LAN mode needs no pairing key."""
+import argparse,json,ipaddress
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-p=argparse.ArgumentParser();p.add_argument('--host',required=True);p.add_argument('--peer',required=True);p.add_argument('--browser-home',default='https://example.com/');a=p.parse_args()
-for value in [a.host,a.peer]:
- ip=ipaddress.ip_address(value)
- if ip.version!=4 or not ip.is_private:raise ValueError('Use local IPv4 addresses')
-if not a.browser_home.startswith(('http://','https://')) or any(c in a.browser_home for c in ['"','\\','\n','\r']):raise ValueError('Invalid browser URL')
-key=secrets.token_hex(32)
-(ROOT/'local-config.json').write_text(json.dumps(dict(host=a.host,peer=a.peer,port=1337,key=key),indent=2))
-(ROOT/'loader/bridge_config.h').write_text(f'#pragma once\n#define BRIDGE_KEY "{key}"\n#define BRIDGE_PEER "{a.peer}"\n#define BRIDGE_PORT 1337\n')
-(ROOT/'app/src/local_config.hpp').write_text(f'#pragma once\n#define BRIDGE_KEY "{key}"\n#define BROWSER_HOME "{a.browser_home}"\n')
-print('(AI-assisted) Private pairing configured; rebuild the payload (and optional app)')
+p=argparse.ArgumentParser();p.add_argument('--host',required=True);p.add_argument('--peer');p.add_argument('--browser-home');a=p.parse_args()
+ip=ipaddress.ip_address(a.host)
+if ip.version!=4 or not (ip in ipaddress.ip_network('10.0.0.0/8') or ip in ipaddress.ip_network('172.16.0.0/12') or ip in ipaddress.ip_network('192.168.0.0/16')):raise ValueError('Use a private LAN IPv4 address')
+(ROOT/'local-config.json').write_text(json.dumps({'host':a.host,'port':1337},indent=2)+'\n')
+print('(AI-assisted) PS5 address configured; no key or rebuild needed')

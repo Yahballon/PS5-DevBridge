@@ -10,12 +10,12 @@ static bool full_read(int fd,void* dst,size_t n){char* p=(char*)dst;while(n){aut
 int main(){
  signal(SIGPIPE,SIG_IGN);
  int listener=socket(AF_INET,SOCK_STREAM,0);if(listener<0)return 1;
- sockaddr_in addr{};addr.sin_len=sizeof(addr);addr.sin_family=AF_INET;addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);addr.sin_port=htons(1343);
+ sockaddr_in addr{};addr.sin_len=sizeof(addr);addr.sin_family=AF_INET;addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);addr.sin_port=htons(1344);
  if(bind(listener,(sockaddr*)&addr,sizeof(addr))||listen(listener,4)){close(listener);return 1;}
  for(;;){int fd=accept(listener,nullptr,nullptr);if(fd<0)continue;
   timeval timeout{5,0};setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&timeout,sizeof(timeout));
   char header[80]{};uint32_t op=0,size=0;bool authenticated=full_read(fd,header,sizeof(header));
-  unsigned diff=0;for(unsigned i=0;i<64;i++)diff|=(unsigned char)header[8+i]^(unsigned char)BRIDGE_KEY[i];
+  unsigned diff=0; // Local worker: header magic and bounds still checked.
   memcpy(&op,header+72,4);memcpy(&size,header+76,4);
   if(!authenticated||memcmp(header,"PS5DEV1\0",8)||diff||op!=10||size<28||size>524){close(fd);continue;}
   unsigned char body[524]{};if(!full_read(fd,body,size)){close(fd);continue;}

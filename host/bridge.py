@@ -4,7 +4,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def request(op,data=b'',tail=b'',timeout=45):
  c=json.loads((ROOT/'local-config.json').read_text())
  with socket.create_connection((c['host'],c['port']),5) as s:
-  s.settimeout(timeout);s.sendall(struct.pack('<8s64sII',b'PS5DEV1\0',c['key'].encode(),op,len(data))+data+tail)
+  s.settimeout(timeout);s.sendall(struct.pack('<8s64sII',b'PS5DEV1\0',b'',op,len(data))+data+tail)
   out=bytearray()
   while len(out)<34*1024*1024:
    try:b=s.recv(65536)
