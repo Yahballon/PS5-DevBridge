@@ -1,4 +1,4 @@
-# PS5 DevBridge v0.2.0 (AI-assisted)
+# PS5 DevBridge v0.2.0
 
 A background PS5 homebrew development payload on TCP **1337**, plus an optional live-log TV console. The payload stays available when the app is closed.
 
