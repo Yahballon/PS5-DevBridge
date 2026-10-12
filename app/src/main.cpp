@@ -4,7 +4,11 @@
 #include "platform/ps5/system.hpp"
 #include "glyphs.hpp"
 #include "browser_launcher.hpp"
+#if !defined(DEVBRIDGE_PUBLIC_RELEASE)
 #include "local_config.hpp"
+#else
+#define BROWSER_HOME "https://example.com/"
+#endif
 #include <GL/glcorearb.h>
 #include <array>
 #include <cstdio>
@@ -21,12 +25,20 @@ extern "C" int sceNetRecv(int,void*,size_t,int);
 extern "C" int sceNetSocketClose(int);
 extern "C" int sceNetSetsockopt(int,int,int,const void*,unsigned);
 struct Address{uint8_t size,family;uint16_t port;uint32_t ip;uint16_t vport;uint8_t zero[6];};
+static std::string pairing_key(){
+#if defined(DEVBRIDGE_PUBLIC_RELEASE)
+ FILE* f=fopen("/data/ps5-devbridge/pairing-key","rb");if(!f)return {};char b[65]{};size_t n=fread(b,1,65,f);fclose(f);if(n!=64)return {};for(unsigned i=0;i<64;i++)if(!((b[i]>='0'&&b[i]<='9')||(b[i]>='a'&&b[i]<='f')))return {};return std::string(b,64);
+#else
+ return BRIDGE_KEY;
+#endif
+}
 static std::string query(uint32_t op,const std::string& body=""){
+ std::string key=pairing_key();if(key.empty())return "Pairing missing - run host/prepare_release_app.py";
  int s=sceNetSocket("devbridge_status",2,1,6);if(s<0)return "Network socket unavailable";
  int timeout=op==9?10000000:250000;for(int opt:{0x1105,0x1106,0x1109})sceNetSetsockopt(s,0xffff,opt,&timeout,sizeof(timeout));
  Address a{sizeof(Address),2,0x3905,0x0100007f,0,{}}; // 1337 in network byte order
  if(sceNetConnect(s,&a,sizeof(a))<0){sceNetSocketClose(s);return "Port 1337 offline - start devbridge-loader.elf";}
- std::array<char,80> h{};memcpy(h.data(),"PS5DEV1",7);memcpy(h.data()+8,BRIDGE_KEY,64);memcpy(h.data()+72,&op,4);uint32_t length=body.size();memcpy(h.data()+76,&length,4);
+ std::array<char,80> h{};memcpy(h.data(),"PS5DEV1",7);memcpy(h.data()+8,key.data(),64);memcpy(h.data()+72,&op,4);uint32_t length=body.size();memcpy(h.data()+76,&length,4);
  size_t sent=0;while(sent<h.size()){int n=sceNetSend(s,h.data()+sent,h.size()-sent,0);if(n<=0)break;sent+=n;}
  size_t body_sent=0;while(body_sent<body.size()){int n=sceNetSend(s,body.data()+body_sent,body.size()-body_sent,0);if(n<=0)break;body_sent+=n;}
  std::string result;char b[1024];for(;;){int n=sceNetRecv(s,b,sizeof(b),0);if(n<=0)break;result.append(b,n);if(result.size()>16384)break;}
@@ -47,7 +59,13 @@ static std::string browser(const std::string& requested=BROWSER_HOME){
  return query(9,requested);
 }
 // (AI-assisted) Native app may send the embedded payload to an existing local loader.
-static std::string start_payload(){FILE* f=fopen("/app0/devbridge-loader.elf","rb");if(!f)return "Embedded payload missing";fseek(f,0,SEEK_END);long n=ftell(f);rewind(f);if(n<64||n>8*1024*1024){fclose(f);return "Invalid payload";}std::vector<char> b(n);bool okay=fread(b.data(),1,b.size(),f)==b.size();fclose(f);if(!okay)return "Payload read failed";
+static std::string start_payload(){
+#if defined(DEVBRIDGE_PUBLIC_RELEASE)
+ const char* payload_path="/data/ps5-devbridge/devbridge-loader.elf";
+#else
+ const char* payload_path="/app0/devbridge-loader.elf";
+#endif
+ FILE* f=fopen(payload_path,"rb");if(!f)return "Embedded payload missing";fseek(f,0,SEEK_END);long n=ftell(f);rewind(f);if(n<64||n>8*1024*1024){fclose(f);return "Invalid payload";}std::vector<char> b(n);bool okay=fread(b.data(),1,b.size(),f)==b.size();fclose(f);if(!okay)return "Payload read failed";
  int s=sceNetSocket("devbridge_bootstrap",2,1,6);if(s<0)return "Socket unavailable";int timeout=2000000;for(int opt:{0x1105,0x1106,0x1109})sceNetSetsockopt(s,0xffff,opt,&timeout,sizeof(timeout));Address a{sizeof(Address),2,0x3d23,0x0100007f,0,{}};
  if(sceNetConnect(s,&a,sizeof(a))<0){sceNetSocketClose(s);return "Local loader 9021 offline - load payload with Payload Manager";}size_t at=0;while(at<b.size()){int got=sceNetSend(s,b.data()+at,b.size()-at,0);if(got<=0)break;at+=got;}sceNetSocketClose(s);return at==b.size()?"Payload sent - waiting for port 1337":"Payload transfer failed";}
 int main(){
