@@ -1,0 +1,99 @@
+name: Build PS5 Simple Calc
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'templates/simple-calc/**'
+      - '.github/workflows/build-simple-calc.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'templates/simple-calc/**'
+      - '.github/workflows/build-simple-calc.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: templates/simple-calc
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang-18 lld-18 llvm-18 ninja-build make wget curl unzip \
+            tar git python3 zlib1g-dev pkg-config ca-certificates
+
+      - name: Validate presentation assets
+        run: bash tools/validate-assets.sh
+
+      - name: Prepare pinned PS5 SDK and OpenGL libraries
+        env:
+          USE_CCACHE: "0"
+          BUILD_JOBS: "4"
+          PS5_CLANG: clang-18
+        run: bash tools/prepare-opengl.sh
+
+      - name: Build native PS5 application
+        env:
+          USE_CCACHE: "0"
+          BUILD_JOBS: "4"
+          PS5_CLANG: clang-18
+        run: make USE_CCACHE=0 BUILD_JOBS=4 app
+
+      - name: Verify PS5 package
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, struct, zipfile
+          dist = pathlib.Path("dist")
+          pkg = dist / "PPSA99339"
+          eboot = pkg / "eboot.bin"
+          libc = pkg / "sce_module" / "libc.prx"
+          param = pkg / "sce_sys" / "param.json"
+          archive = dist / "PPSA99339.zip"
+          for path in (eboot, libc, param, archive):
+              if not path.is_file() or not path.stat().st_size:
+                  raise SystemExit(f"Missing or empty PS5 file: {path}")
+          if struct.unpack("<I", eboot.read_bytes()[:4])[0] != 0x1D3D154F:
+              raise SystemExit("eboot.bin has unexpected FSELF magic")
+          if json.loads(param.read_text())["titleId"] != "PPSA99339":
+              raise SystemExit("Unexpected title ID")
+          with zipfile.ZipFile(archive) as z:
+              bad = z.testzip()
+              if bad:
+                  raise SystemExit(f"ZIP corruption: {bad}")
+              for item in ("eboot.bin", "sce_module/libc.prx", "sce_sys/param.json"):
+                  if f"PPSA99339/{item}" not in z.namelist():
+                      raise SystemExit(f"ZIP is missing {item}")
+          print(f"Verified {archive}: {archive.stat().st_size:,} bytes")
+          PY
+
+      - name: Upload ready-to-mount PS5 ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Simple-Calc-PS5-PPSA99339
+          path: templates/simple-calc/dist/PPSA99339.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload logs if build failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Simple-Calc-build-debug
+          path: |
+            templates/simple-calc/build/**/*.ninja
+            templates/simple-calc/.deps/native/zlib/build.log
+          if-no-files-found: ignore
+          retention-days: 7
