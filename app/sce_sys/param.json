@@ -1,0 +1,38 @@
+{
+  "ageLevel": {
+    "default": 0
+  },
+  "applicationCategoryType": 0,
+  "applicationDrmType": "free",
+  "attribute": 0,
+  "attribute2": 0,
+  "attribute3": 0,
+  "conceptId": "99337",
+  "contentBadgeType": 1,
+  "contentId": "UP9000-PPSA99337_00-PS5DEVBRIDGE0001",
+  "contentVersion": "01.000.003",
+  "downloadDataSize": 256,
+  "localizedParameters": {
+    "defaultLanguage": "en-US",
+    "en-US": {
+      "titleName": "PS5 DevBridge"
+    }
+  },
+  "masterVersion": "01.00",
+  "pubtools": {
+    "creationDate": "2026-10-01 00:00:00",
+    "loudnessSnd0": "-28.00",
+    "toolVersion": "2.00"
+  },
+  "requiredSystemSoftwareVersion": "0x0000000000000000",
+  "sdkVersion": "0x0000000000000000",
+  "titleId": "PPSA99337",
+  "versionFileUri": "",
+  "gameIntent": {
+    "permittedIntents": [
+      {
+        "intentType": "launchActivity"
+      }
+    ]
+  }
+}

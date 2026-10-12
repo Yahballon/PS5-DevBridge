@@ -1,0 +1,5 @@
+{
+  "checks": [
+    {"name": "Current app screen", "steps": [], "settle_seconds": 1}
+  ]
+}

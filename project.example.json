@@ -1,0 +1,7 @@
+{
+  "build": ["make"],
+  "elf": "dist/calculator.elf",
+  "ready_marker": "APP_READY calculator",
+  "steps": [],
+  "screenshot": true
+}

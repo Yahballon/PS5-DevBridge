@@ -1,0 +1,9 @@
+local-config.json
+loader/bridge_config.h
+app/src/local_config.hpp
+**/.deps/
+**/build/
+**/*.o
+**/*.elf
+**/__pycache__/
+logs/

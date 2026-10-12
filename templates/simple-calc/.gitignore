@@ -1,0 +1,5 @@
+.deps/
+build/
+dist/
+runtime/*.prx
+__pycache__/
