@@ -1,8 +1,13 @@
-# PS5 DevBridge v1.0.2.2
+# PS5 DevBridge v1.0.2.3
 
-- Rebuilt from current key-free LAN sources (payload version 0.2.2).
-- Removes the legacy pairing requirement; no prepare_release_app.py setup needed.
-- Includes the matching payload inside the native app. Square starts it through localhost port 9021.
-- Updates the native UI to OpenGL 3.3 for the source-built SDK.
-- Adds automated release builds, graphics version checks and checks against the old pairing message.
-- Preserves port 1337 and all existing controller, file, screenshot and app-management commands.
+- Adds a resident process-memory debugger through the existing port 1337.
+- Supports 8/16/32/64-bit signed/unsigned integers and float32/float64 scans.
+- Adds unknown-value snapshots and changed/unchanged/increased/decreased/exact filters.
+- Adds live read/watch, expected-value checked edits, readback verification and bounded freeze.
+- Adds basic pointer-chain search/resolution and session/version-labelled local profiles.
+- Rejects stale process identities, kernel addresses, device/unmapped ranges and executable writes.
+- Adds host/protocol regressions and a dedicated Memory Lab hardware test.
+- Retains key-free LAN operation and the matching embedded payload.
+
+Validated on firmware 5.10 against the included Memory Lab, not an actual game.
+Pointer roots and profiles are absolute and session-bound; automatic module-relative/ASLR resolution is not included.

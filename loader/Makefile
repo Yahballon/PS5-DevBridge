@@ -1,4 +1,4 @@
-#   Copyright (C) 2024 John Törnblom
+#   Copyright (C) 2024 John TÃ¶rnblom
 #
 # This file is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -43,7 +43,10 @@ photo-read.elf: ../helpers/screenshot-file-reader/main.cpp
 apps.elf: ../helpers/apps/main.cpp
 	$(MAKE) -C ../helpers/apps
 	cp ../dist/apps.elf $@
-socksrv.o: apps.elf bridge_config.h browser-open.elf controller-service.elf package.elf photo-list.elf photo-read.elf file_commands.h
+memory-worker.elf: ../helpers/memory/main.cpp ../helpers/memory/protocol.hpp
+	$(MAKE) -C ../helpers/memory
+	cp ../dist/memory-worker.elf $@
+socksrv.o: memory-worker.elf apps.elf bridge_config.h browser-open.elf controller-service.elf package.elf photo-list.elf photo-read.elf file_commands.h
 bootstrap.o: socksrv.elf
 main.o: bootstrap.elf
 

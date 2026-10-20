@@ -6,3 +6,6 @@ app/src/local_config.hpp
 **/*.elf
 **/__pycache__/
 logs/
+
+memory-sessions/
+loader-build.log

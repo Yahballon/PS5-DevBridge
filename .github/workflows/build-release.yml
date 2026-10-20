@@ -125,6 +125,11 @@ jobs:
         PY
 
         '
+    - name: Test memory debugger host and protocol
+      run: |
+        python3 -m unittest discover -s tests -p test_memory.py -v
+        g++ -std=c++20 -Wall -Wextra -Werror tests/test_memory_protocol.cpp -o /tmp/memory-protocol-test
+        /tmp/memory-protocol-test
     - name: Build LAN payload and helpers
       env:
         PS5_CLANG: clang-18
@@ -153,13 +158,13 @@ jobs:
     - name: Verify release package
       run: "python3 - <<'PY'\nfrom pathlib import Path\nimport zipfile,json,hashlib\npayload=Path('dist/devbridge-loader.elf').read_bytes()\n\
         assert payload[:4]==b'\\x7fELF' and len(payload)<8*1024*1024\nwith zipfile.ZipFile('app/dist/PPSA99337.zip') as z:\n assert z.testzip()\
-        \ is None\n param=json.loads(z.read('PPSA99337/sce_sys/param.json'))\n assert param['titleId']=='PPSA99337' and param['contentVersion']=='01.000.022'\n\
-        \ app=z.read('PPSA99337/eboot.bin')\n assert b'Pairing missing' not in app and b'v0.2.2' in app\n assert z.read('PPSA99337/devbridge-loader.elf')==payload\n\
+        \ is None\n param=json.loads(z.read('PPSA99337/sce_sys/param.json'))\n assert param['titleId']=='PPSA99337' and param['contentVersion']=='01.000.023'\n\
+        \ app=z.read('PPSA99337/eboot.bin')\n assert b'Pairing missing' not in app and b'v0.2.3' in app\n assert z.read('PPSA99337/devbridge-loader.elf')==payload\n\
         Path('dist/PPSA99337.zip').write_bytes(Path('app/dist/PPSA99337.zip').read_bytes())\nPath('dist/SHA256SUMS').write_text(''.join(hashlib.sha256(Path('dist',f).read_bytes()).hexdigest()+'\
         \  '+f+'\\n' for f in ['PPSA99337.zip','devbridge-loader.elf']))\nPY\n"
     - uses: actions/upload-artifact@v4
       with:
-        name: PS5-DevBridge-v1.0.2.2
+        name: PS5-DevBridge-v1.0.2.3
         path: 'dist/PPSA99337.zip
 
           dist/devbridge-loader.elf
@@ -170,9 +175,9 @@ jobs:
       if: github.ref == 'refs/heads/main'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: 'if gh release view v1.0.2.2 >/dev/null 2>&1; then exit 0; fi
+      run: 'if gh release view v1.0.2.3 >/dev/null 2>&1; then exit 0; fi
 
-        gh release create v1.0.2.2 dist/PPSA99337.zip dist/devbridge-loader.elf dist/SHA256SUMS --target "$GITHUB_SHA" --latest --title "PS5 DevBridge
-        v1.0.2.2" --notes-file RELEASE_NOTES.md
+        gh release create v1.0.2.3 dist/PPSA99337.zip dist/devbridge-loader.elf dist/SHA256SUMS --target "$GITHUB_SHA" --latest --title "PS5 DevBridge
+        v1.0.2.3" --notes-file RELEASE_NOTES.md
 
         '

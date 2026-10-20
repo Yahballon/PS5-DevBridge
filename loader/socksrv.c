@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 John Törnblom
+/* Copyright (C) 2024 John TÃƒÂ¶rnblom
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -44,6 +44,7 @@ INCASSET(browser_open_elf,"browser-open.elf");
 INCASSET(controller_service_elf,"controller-service.elf");
 INCASSET(package_elf,"package.elf");
 INCASSET(apps_elf,"apps.elf");
+INCASSET(memory_worker_elf,"memory-worker.elf");
 INCASSET(photo_list_elf,"photo-list.elf");
 INCASSET(photo_read_elf,"photo-read.elf");
 static void event(const char* message) {
@@ -100,6 +101,16 @@ static void input_relay(int fd,const char* header,uint32_t size){
  if(!write_all(s,header,80)&&!write_all(s,body,size)){char b[4096];ssize_t n;while((n=read(s,b,sizeof(b)))>0)if(write_all(fd,b,n))break;}
  close(s);
 }
+// Resident loopback memory worker; the public entry remains port 1337.
+static int memory_connect(void){int fd=socket(AF_INET,SOCK_STREAM,0);if(fd<0)return -1;struct sockaddr_in a={0};a.sin_len=sizeof(a);a.sin_family=AF_INET;a.sin_port=htons(1345);a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);if(connect(fd,(void*)&a,sizeof(a))){close(fd);return -1;}return fd;}
+static void memory_relay(int fd,const char* header,uint32_t size){
+ unsigned char body[80];if(exact(fd,body,size))return;
+ int worker=memory_connect();if(worker<0){char* args[]={"db-memory-worker",NULL};if(elfldr_spawn(-1,args,memory_worker_elf,memory_worker_elf_size)<0)return;
+  for(unsigned i=0;i<100&&worker<0;i++){usleep(50000);worker=memory_connect();}}
+ if(worker<0)return;struct timeval wait={30,0};setsockopt(worker,SOL_SOCKET,SO_RCVTIMEO,&wait,sizeof(wait));setsockopt(worker,SOL_SOCKET,SO_SNDTIMEO,&wait,sizeof(wait));
+ if(!write_all(worker,header,80)&&!write_all(worker,body,size)){char data[16384];ssize_t n;while((n=read(worker,data,sizeof(data)))>0)if(write_all(fd,data,n))break;}
+ close(worker);
+}
 #include "file_commands.h"
 static time_t last_host=0;
 static void on_connection(int fd,int remote){
@@ -110,13 +121,14 @@ static void on_connection(int fd,int remote){
  if(memcmp(header,"PS5DEV1\0",8)||diff){event("Rejected protocol header");return;}
  if(remote)last_host=time(NULL);
  uint32_t op,size;memcpy(&op,header+72,4);memcpy(&size,header+76,4);
+ if(op==21&&size>=48&&size<=80){pid_t child=fork();if(child==0){memory_relay(fd,header,size);close(fd);_exit(0);}return;}
  if(op==20&&size==1044){char* args[]={"managed-app.elf",NULL};elfldr_spawn(fd,args,apps_elf,apps_elf_size);return;}
  if(op>=11&&op<=13){pid_t child=fork();if(child==0){file_command(fd,op,size);close(fd);_exit(0);}return;}
  if((op==14||op==15||op==19)&&size==1028){char* args[]={"package-command.elf",NULL};elfldr_spawn(fd,args,package_elf,package_elf_size);return;}
  if(op==16&&size==0){char* args[]={"photo-list.elf",NULL};elfldr_spawn(fd,args,photo_list_elf,photo_list_elf_size);return;}
  if(op==17&&size==776){char* args[]={"photo-read.elf",NULL};elfldr_spawn(fd,args,photo_read_elf,photo_read_elf_size);return;}
  if(op==10&&size>=28&&size<=524){pid_t child=fork();if(child==0){input_relay(fd,header,size);close(fd);_exit(0);}if(child<0)event("Input relay fork failed");return;}
- if(op==1&&size==0){char ip[INET_ADDRSTRLEN],reply[256];local_address(ip,sizeof(ip));int n=snprintf(reply,sizeof(reply),"DEVBRIDGE/1 READY version=0.2.2 mode=LAN port=1337 ip=%s host=%s age=%lld firmware=%08x\n",ip,last_host&&time(NULL)-last_host<15?"connected":"idle",last_host?(long long)(time(NULL)-last_host):-1LL,(unsigned)kernel_get_fw_version());write(fd,reply,n);return;}
+ if(op==1&&size==0){char ip[INET_ADDRSTRLEN],reply[256];local_address(ip,sizeof(ip));int n=snprintf(reply,sizeof(reply),"DEVBRIDGE/1 READY version=0.2.3 mode=LAN port=1337 ip=%s host=%s age=%lld firmware=%08x\n",ip,last_host&&time(NULL)-last_host<15?"connected":"idle",last_host?(long long)(time(NULL)-last_host):-1LL,(unsigned)kernel_get_fw_version());write(fd,reply,n);return;}
  if(op==3&&size==0){FILE* f=fopen("/data/ps5-devbridge/events.log","r");if(f){fseek(f,0,SEEK_END);long n=ftell(f);fseek(f,n>16384?n-16384:0,SEEK_SET);char line[512];while(fgets(line,sizeof(line),f))write(fd,line,strlen(line));fclose(f);}return;}
  if(op==5&&size==0){FILE* f=fopen("/data/ps5-devbridge/browser-request.txt","r");if(f){char url[2048]={0};if(fgets(url,sizeof(url),f))write(fd,url,strlen(url));fclose(f);remove("/data/ps5-devbridge/browser-request.txt");}return;}
  if((op==4||op==9)&&size>0&&size<2048){char url[2048]={0};if(exact(fd,url,size))return;if(strncmp(url,"https://",8)&&strncmp(url,"http://",7))return;if(strpbrk(url,"\r\n"))return;
@@ -260,8 +272,8 @@ int main() {
   signal(SIGCHLD, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
 
-  event("PS5 DevBridge v0.2.2 started on port 1337 (AI-assisted)");
-  notify_address("Welcome to PS5 DevBridge v0.2.2 (AI-assisted)\nPayload ready - IP / port:", port);
+  event("PS5 DevBridge v0.2.3 started on port 1337 (AI-assisted)");
+  notify_address("Welcome to PS5 DevBridge v0.2.3 (AI-assisted)\nPayload ready - IP / port:", port);
   while(1) {
     serve_elfldr(port);
     sleep(3);

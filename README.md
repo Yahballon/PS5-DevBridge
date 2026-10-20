@@ -1,4 +1,4 @@
-# PS5 DevBridge v0.2.2 (AI-assisted)
+# PS5 DevBridge v0.2.3 (AI-assisted)
 
 A background PS5 homebrew development payload on TCP **1337**, plus an optional live-log TV console. The payload stays available when the app is closed.
 
@@ -60,7 +60,7 @@ Set `PS5_PAYLOAD_SDK` to your SDK directory, then run `bash build.sh` for the pa
 
 ## Public release app
 
-`dist/PS5-DevBridge-v0.2.2-release-app.zip` is the public native app with the generic, key-free payload included. It needs no pairing file. Install/mount the PPSA99337 folder; Square sends its embedded payload to your existing localhost ELF loader on port 9021.
+`dist/PS5-DevBridge-v0.2.3-release-app.zip` is the public native app with the generic, key-free payload included. It needs no pairing file. Install/mount the PPSA99337 folder; Square sends its embedded payload to your existing localhost ELF loader on port 9021.
 
 Build it with `bash build-release-app.sh`. The ELF and app can now be distributed without embedding personal pairing credentials.
 
@@ -148,10 +148,41 @@ Do not modify unrelated apps, system software or kernel behavior. Do not claim a
 
 The local service uses plain TCP without authentication or TLS. This is a development bridge, not a remote command shell. Uploaded ELFs are size/layout checked. Helper outputs must be checked independently of spawn results.
 
-## Verified in v0.2.2
+## Verified in v0.2.3
 
 Payload and native app build successfully. On the 5.10 console: managed register/list/state, close/update/start, live-log UI screenshot, file transfer, crash fault/register/stack report and a real header-baseline UI check passed. The calculator starter builds successfully. Managed removal and the app button's offline bootstrap still need a dedicated live check.
 
 ## Credits
 
 Payload loader: ps5-payload-dev/elfldr (GPL; see UPSTREAM.md). Native UI/runtime: [BlackBearReloaded / ps5-homebrew-ui](https://github.com/blackbearreloaded/ps5-homebrew-ui). Original notices and licenses are retained.
+
+
+## Memory debugger — release v1.0.2.3 / payload 0.2.3
+
+The resident memory worker adds process selection, memory maps, typed exact and
+unknown-value searches, iterative filters, live reads/watch, verified edits,
+bounded freeze with conditional restoration, basic pointer-chain searches and
+session/version-labelled local profiles. Commands use the existing port 1337;
+no per-command ELF compilation or upload is needed. See
+[MEMORY-DEBUGGER.md](docs/MEMORY-DEBUGGER.md) for commands and limits.
+
+Hardware integration was tested on firmware 5.10 with the included Memory Lab,
+not an actual game. The test found health=100, edited it to 75, narrowed the
+search, exercised float writes, unknown snapshots, freeze, a two-level pointer
+chain and profiles, rejected stale expected values, executable writes, kernel
+addresses and wrong process cookies, then restored all test values. Profiles
+and absolute pointer roots must be rediscovered/validated after a restart.
+
+Host examples:
+
+```console
+python host/memory.py processes
+python host/memory.py select GAME_PID
+python host/memory.py scan --type u32 --value 100
+python host/memory.py filter decreased
+python host/memory.py results
+```
+
+Memory RPC is operation 21. The loopback-only worker starts on demand on port
+1345; ordinary clients use the main DevBridge port 1337. The native TV console
+remains an optional companion, not a requirement for scans.

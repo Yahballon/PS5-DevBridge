@@ -14,6 +14,6 @@ if [[ "${1:-}" == "--with-app" ]]; then
  mkdir -p "$root/app/build"
  cp "$root/dist/devbridge-loader.elf" "$root/app/build/"
  make -C "$root/app" USE_CCACHE=0 BUILD_JOBS=4 app > "$root/app-build.log" 2>&1
-cp "$root/app/dist/PPSA99337.zip" "$root/dist/PS5-DevBridge-v0.2.2.zip"
+cp "$root/app/dist/PPSA99337.zip" "$root/dist/PS5-DevBridge-v0.2.3.zip"
 
 fi
