@@ -1,0 +1,178 @@
+name: Build and release PS5 DevBridge
+'on':
+  workflow_dispatch: {}
+  push:
+    branches:
+    - main
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install toolchain
+      run: 'sudo apt-get update
+
+        sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 ninja-build make wget curl unzip tar git python3 python3-pil pkg-config
+        ca-certificates ffmpeg g++ libssl-dev
+
+        '
+    - name: Prepare key-free native UI
+      run: 'python3 tools/patch_ui_gl33.py app
+
+        '
+    - name: Install graphics source build tools
+      run: 'curl --fail --location --retry 3 https://apt.llvm.org/llvm-snapshot.gpg.key -o "$RUNNER_TEMP/llvm.asc"
+
+        test "$(gpg --show-keys --with-colons "$RUNNER_TEMP/llvm.asc" | awk -F: ''$1 == "fpr" {print $10; exit}'')" = 6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
+
+        sudo install -m 0644 "$RUNNER_TEMP/llvm.asc" /usr/share/keyrings/llvm.asc
+
+        echo ''deb [signed-by=/usr/share/keyrings/llvm.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-21 main'' | sudo tee /etc/apt/sources.list.d/llvm21.list
+
+        sudo apt-get update
+
+        sudo apt-get install -y --no-install-recommends clang-21 lld-21 llvm-21-dev cmake python3-venv glslang-tools spirv-tools bison flex
+
+        python3 -m venv "$RUNNER_TEMP/graphics-tools"
+
+        "$RUNNER_TEMP/graphics-tools/bin/pip" install meson==1.10.1 Mako==1.3.10 PyYAML==6.0.2 packaging==25.0
+
+        echo "$RUNNER_TEMP/graphics-tools/bin" >> "$GITHUB_PATH"
+
+        '
+    - uses: actions/cache/restore@v4
+      id: graphics-cache
+      with:
+        path: ${{ runner.temp }}/theme-opengl/build/sdk/ps5-opengl-core33
+        key: theme-opengl-7f9bfabd-sdk042-clang18-1080p60-audit2-layout1
+    - name: Build pinned public OpenGL source (replaces unavailable release archive)
+      if: steps.graphics-cache.outputs.cache-hit != 'true'
+      env:
+        PS5_CLANG: clang-18
+        LLVM_CONFIG: /usr/bin/llvm-config-21
+        PSBC_JOBS: '2'
+        PS5_SCANOUT_HEIGHT: '1080'
+        PS5_SCANOUT_FPS: '60'
+        PS5_GPU_PRESENT_BATCH: '1'
+        PS5_DRAW_PROFILE: '1'
+        PS5_MULTIDRAW_BATCH: '1'
+        PS5_DEFERRED_DRAW_BATCH: '1'
+      run: 'set -euo pipefail
+
+        bash app/tools/setup-native-dependencies.sh
+
+        export PS5_PAYLOAD_SDK="$GITHUB_WORKSPACE/app/.deps/native/ps5-payload-sdk"
+
+        export PATH="/usr/lib/llvm-18/bin:$PS5_PAYLOAD_SDK/bin:$PATH"
+
+        git clone --no-checkout https://github.com/Gudui/ps5-opengl.git "$RUNNER_TEMP/theme-opengl"
+
+        git -C "$RUNNER_TEMP/theme-opengl" checkout --detach 7f9bfabdddb187a11e4401058eba8c9e55194d0a
+
+        test "$(git -C "$RUNNER_TEMP/theme-opengl" rev-parse HEAD)" = 7f9bfabdddb187a11e4401058eba8c9e55194d0a
+
+        python3 tools/patch_opengl_audit.py "$RUNNER_TEMP/theme-opengl"
+
+        make -C "$RUNNER_TEMP/theme-opengl" source-fetch sdk
+
+        prefix="$RUNNER_TEMP/theme-opengl/build/sdk/ps5-opengl-core33"
+
+        (cd "$prefix" && sha256sum --check --strict --quiet manifest.sha256)
+
+        # Source SDK uses the Core33 linker group; the UI template expects its old name.
+
+        cp "$prefix/lib/libPS5OpenGLCore33.a" "$prefix/lib/libPS5OpenGL.a"
+
+        (cd "$prefix" && sha256sum lib/libPS5OpenGL.a >> manifest.sha256)
+
+        (cd "$prefix" && sha256sum --check --strict --quiet manifest.sha256)
+
+        echo "PS5_OPENGL_PREFIX=$prefix" >> "$GITHUB_ENV"
+
+        '
+    - uses: actions/cache/save@v4
+      if: steps.graphics-cache.outputs.cache-hit != 'true'
+      with:
+        path: ${{ runner.temp }}/theme-opengl/build/sdk/ps5-opengl-core33
+        key: theme-opengl-7f9bfabd-sdk042-clang18-1080p60-audit2-layout1
+    - name: Select verified source SDK
+      run: echo "PS5_OPENGL_PREFIX=$RUNNER_TEMP/theme-opengl/build/sdk/ps5-opengl-core33" >> "$GITHUB_ENV"
+    - name: Prepare PS5 graphics SDK
+      working-directory: app
+      env:
+        PS5_CLANG: clang-18
+        USE_CCACHE: '0'
+        BUILD_JOBS: '4'
+      run: bash tools/prepare-opengl.sh
+    - name: Validate UI shaders and key-free mode
+      run: 'python3 tools/test_gl33_shaders.py app
+
+        python3 - <<''PY''
+
+        from pathlib import Path
+
+        source=Path(''app/src/main.cpp'').read_text()
+
+        assert ''Pairing missing'' not in source and ''pairing_key()'' not in source
+
+        assert ''std::string key(64,0)'' in source
+
+        assert ''key'' not in Path(''loader/bridge_config.h'').read_text().lower()
+
+        PY
+
+        '
+    - name: Build LAN payload and helpers
+      env:
+        PS5_CLANG: clang-18
+      run: 'export PS5_PAYLOAD_SDK="$GITHUB_WORKSPACE/app/.deps/native/ps5-payload-sdk"
+
+        export PATH="/usr/lib/llvm-18/bin:$PS5_PAYLOAD_SDK/bin:$PATH"
+
+        bash build.sh
+
+        '
+    - name: Prepare POSIX compat
+      run: 'mkdir -p app/build/jb-json
+
+        cp app/.deps/native/ps5-payload-sdk/target/lib/libc.a app/build/jb-json/libjb-posix.a
+
+        llvm-objcopy-18 --redefine-sym=openlog=jb_sdk_openlog --redefine-sym=closelog=jb_sdk_closelog --redefine-sym=mkstemp=jb_sdk_mkstemp --redefine-sym=mkstemps=jb_sdk_mkstemps
+        --redefine-sym=getpwuid_r=jb_sdk_getpwuid_r app/build/jb-json/libjb-posix.a
+
+        '
+    - name: Build native release app
+      env:
+        PS5_CLANG: clang-18
+        USE_CCACHE: '0'
+        BUILD_JOBS: '4'
+      run: bash build-release-app.sh
+    - name: Verify release package
+      run: "python3 - <<'PY'\nfrom pathlib import Path\nimport zipfile,json,hashlib\npayload=Path('dist/devbridge-loader.elf').read_bytes()\n\
+        assert payload[:4]==b'\\x7fELF' and len(payload)<8*1024*1024\nwith zipfile.ZipFile('app/dist/PPSA99337.zip') as z:\n assert z.testzip()\
+        \ is None\n param=json.loads(z.read('PPSA99337/sce_sys/param.json'))\n assert param['titleId']=='PPSA99337' and param['contentVersion']=='01.000.022'\n\
+        \ app=z.read('PPSA99337/eboot.bin')\n assert b'Pairing missing' not in app and b'v0.2.2' in app\n assert z.read('PPSA99337/devbridge-loader.elf')==payload\n\
+        Path('dist/PPSA99337.zip').write_bytes(Path('app/dist/PPSA99337.zip').read_bytes())\nPath('dist/SHA256SUMS').write_text(''.join(hashlib.sha256(Path('dist',f).read_bytes()).hexdigest()+'\
+        \  '+f+'\\n' for f in ['PPSA99337.zip','devbridge-loader.elf']))\nPY\n"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: PS5-DevBridge-v1.0.2.2
+        path: 'dist/PPSA99337.zip
+
+          dist/devbridge-loader.elf
+
+          dist/SHA256SUMS'
+        if-no-files-found: error
+    - name: Publish release
+      if: github.ref == 'refs/heads/main'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: 'if gh release view v1.0.2.2 >/dev/null 2>&1; then exit 0; fi
+
+        gh release create v1.0.2.2 dist/PPSA99337.zip dist/devbridge-loader.elf dist/SHA256SUMS --target "$GITHUB_SHA" --latest --title "PS5 DevBridge
+        v1.0.2.2" --notes-file RELEASE_NOTES.md
+
+        '

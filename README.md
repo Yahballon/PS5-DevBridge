@@ -1,4 +1,4 @@
-# PS5 DevBridge v0.2.1 (AI-assisted)
+# PS5 DevBridge v0.2.2 (AI-assisted)
 
 A background PS5 homebrew development payload on TCP **1337**, plus an optional live-log TV console. The payload stays available when the app is closed.
 
@@ -60,7 +60,7 @@ Set `PS5_PAYLOAD_SDK` to your SDK directory, then run `bash build.sh` for the pa
 
 ## Public release app
 
-`dist/PS5-DevBridge-v0.2.1-release-app.zip` is the public native app with the generic, key-free payload included. It needs no pairing file. Install/mount the PPSA99337 folder; Square sends its embedded payload to your existing localhost ELF loader on port 9021.
+`dist/PS5-DevBridge-v0.2.2-release-app.zip` is the public native app with the generic, key-free payload included. It needs no pairing file. Install/mount the PPSA99337 folder; Square sends its embedded payload to your existing localhost ELF loader on port 9021.
 
 Build it with `bash build-release-app.sh`. The ELF and app can now be distributed without embedding personal pairing credentials.
 
@@ -148,7 +148,7 @@ Do not modify unrelated apps, system software or kernel behavior. Do not claim a
 
 The local service uses plain TCP without authentication or TLS. This is a development bridge, not a remote command shell. Uploaded ELFs are size/layout checked. Helper outputs must be checked independently of spawn results.
 
-## Verified in v0.2.1
+## Verified in v0.2.2
 
 Payload and native app build successfully. On the 5.10 console: managed register/list/state, close/update/start, live-log UI screenshot, file transfer, crash fault/register/stack report and a real header-baseline UI check passed. The calculator starter builds successfully. Managed removal and the app button's offline bootstrap still need a dedicated live check.
 

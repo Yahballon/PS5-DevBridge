@@ -116,7 +116,7 @@ static void on_connection(int fd,int remote){
  if(op==16&&size==0){char* args[]={"photo-list.elf",NULL};elfldr_spawn(fd,args,photo_list_elf,photo_list_elf_size);return;}
  if(op==17&&size==776){char* args[]={"photo-read.elf",NULL};elfldr_spawn(fd,args,photo_read_elf,photo_read_elf_size);return;}
  if(op==10&&size>=28&&size<=524){pid_t child=fork();if(child==0){input_relay(fd,header,size);close(fd);_exit(0);}if(child<0)event("Input relay fork failed");return;}
- if(op==1&&size==0){char ip[INET_ADDRSTRLEN],reply[256];local_address(ip,sizeof(ip));int n=snprintf(reply,sizeof(reply),"DEVBRIDGE/1 READY version=0.2.1 mode=LAN port=1337 ip=%s host=%s age=%lld firmware=%08x\n",ip,last_host&&time(NULL)-last_host<15?"connected":"idle",last_host?(long long)(time(NULL)-last_host):-1LL,(unsigned)kernel_get_fw_version());write(fd,reply,n);return;}
+ if(op==1&&size==0){char ip[INET_ADDRSTRLEN],reply[256];local_address(ip,sizeof(ip));int n=snprintf(reply,sizeof(reply),"DEVBRIDGE/1 READY version=0.2.2 mode=LAN port=1337 ip=%s host=%s age=%lld firmware=%08x\n",ip,last_host&&time(NULL)-last_host<15?"connected":"idle",last_host?(long long)(time(NULL)-last_host):-1LL,(unsigned)kernel_get_fw_version());write(fd,reply,n);return;}
  if(op==3&&size==0){FILE* f=fopen("/data/ps5-devbridge/events.log","r");if(f){fseek(f,0,SEEK_END);long n=ftell(f);fseek(f,n>16384?n-16384:0,SEEK_SET);char line[512];while(fgets(line,sizeof(line),f))write(fd,line,strlen(line));fclose(f);}return;}
  if(op==5&&size==0){FILE* f=fopen("/data/ps5-devbridge/browser-request.txt","r");if(f){char url[2048]={0};if(fgets(url,sizeof(url),f))write(fd,url,strlen(url));fclose(f);remove("/data/ps5-devbridge/browser-request.txt");}return;}
  if((op==4||op==9)&&size>0&&size<2048){char url[2048]={0};if(exact(fd,url,size))return;if(strncmp(url,"https://",8)&&strncmp(url,"http://",7))return;if(strpbrk(url,"\r\n"))return;
@@ -260,8 +260,8 @@ int main() {
   signal(SIGCHLD, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
 
-  event("PS5 DevBridge v0.2.1 started on port 1337 (AI-assisted)");
-  notify_address("Welcome to PS5 DevBridge v0.2.1 (AI-assisted)\nPayload ready - IP / port:", port);
+  event("PS5 DevBridge v0.2.2 started on port 1337 (AI-assisted)");
+  notify_address("Welcome to PS5 DevBridge v0.2.2 (AI-assisted)\nPayload ready - IP / port:", port);
   while(1) {
     serve_elfldr(port);
     sleep(3);

@@ -56,7 +56,7 @@ static std::string start_payload(){
 int main(){
  sceNetInit();hui::ps5::Display display;if(!display.open())hui::sys::park();width=display.width();height=display.height();
  hui::ps5::Pad pad;pad.open();glEnable(GL_SCISSOR_TEST);
- std::string status=query(1),host_status="AI / HOST: IDLE",log="PS5 DevBridge v0.2.1 (AI-assisted)\nDedicated ELF service: port 1337\nX: Open browser    Triangle: Refresh status    Options: Close app";
+ std::string status=query(1),host_status="AI / HOST: IDLE",log="PS5 DevBridge v0.2.2 (AI-assisted)\nDedicated ELF service: port 1337\nX: Open browser    Triangle: Refresh status    Options: Close app";
  uint32_t previous=0;uint64_t refresh=0;
  for(;;){
  std::array<hui::PadSample,64> samples{};size_t count=pad.read(samples);uint32_t pressed=0;for(size_t i=0;i<count;i++){pressed|=samples[i].buttons&~previous;previous=samples[i].buttons;}
